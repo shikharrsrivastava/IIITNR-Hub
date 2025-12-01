@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:intl/intl.dart'; // Useful for getting current day if needed
+import 'package:intl/intl.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({super.key});
@@ -16,100 +17,56 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _textFieldFocus = FocusNode();
 
-  final List<Map<String, String>> _history = [];
+  // History now supports an optional 'action' key for buttons
+  final List<Map<String, dynamic>> _history = [];
   bool _isLoading = false;
 
-  // ---------------- SYSTEM PROMPT WITH TIMETABLE DATA ----------------
-  // This string teaches the AI your specific college schedule.
+  // ---------------- INTELLIGENT SYSTEM PROMPT ----------------
+  // This prompt teaches the AI to answer verbally first, then offer links.
   final String systemPrompt = '''
-You are the intelligent assistant for the "IIITNR Hub" college app.
-Your goal is to help students with knowledge, check their timetable, OR navigate them to app sections.
+You are the intelligent assistant for "IIITNR Hub," the official student companion app.
+Your Persona: You are helpful, concise, and knowledgeable about campus logistics.
 
-CURRENT CONTEXT:
-Today is ${DateFormat('EEEE').format(DateTime.now())}.
-
-RULES FOR NAVIGATION:
-If the user asks to see, open, or go to a specific section, reply with a command code ONLY.
-- Timetable -> Reply: "NAVIGATE:timetable"
-- Events / Fests -> Reply: "NAVIGATE:events"
-- Assignments / Tasks -> Reply: "NAVIGATE:assignments"
-- Announcements / News -> Reply: "NAVIGATE:announcements"
-- Contact / Support -> Reply: "NAVIGATE:contact"
-- Home / Dashboard -> Reply: "NAVIGATE:home"
-
----------------------------------------------------
-OFFICIAL CLASS TIMETABLES (IIITNR)
----------------------------------------------------
-
-[CSE - Computer Science Engineering]
-MONDAY:
-09:00-10:00: Calculus (Room 301)
-10:00-11:00: Linear Algebra & Matrix Analysis (Room 301)
-11:00-12:00: Digital Electronics (Room 301)
-12:00-01:00: Environmental Studies (Room 301)
-02:00-03:00: Entrepreneurship (Room 301)
-03:00-04:00: IT Workshop (Room 301)
-04:00-05:00: Problem Solving with C (Room 301)
-05:00-06:00: IoT (Room 301)
-
-TUESDAY:
-09:00-10:00: Problem Solving with C
-10:00-11:00: Environmental Studies
-11:00-12:00: Calculus
-12:00-01:00: Language Competency (Adv-1)
-02:00-03:00: IT Workshop
-03:00-04:00: Digital Electronics
-04:00-05:00: Entrepreneurship
-05:00-06:00: Language Competency (Adv-2)
-
-WEDNESDAY:
-09:00-10:00: IoT
-10:00-11:00: Calculus
-11:00-12:00: Linear Algebra
-12:00-01:00: Digital Electronics
-02:00-03:00: Environmental Studies
-03:00-04:00: Language Competency (Adv-2)
-04:00-05:00: IT Workshop
-05:00-06:00: Language Competency (Adv-1)
-
-THURSDAY:
-09:00-10:00: Environmental Studies
-10:00-11:00: Entrepreneurship
-11:00-12:00: Calculus
-12:00-01:00: Problem Solving with C
-02:00-03:00: Digital Electronics
-03:00-04:00: IoT
-04:00-05:00: Linear Algebra
-05:00-06:00: Language Competency (Adv-1)
-
-FRIDAY:
-09:00-10:00: Digital Electronics
-10:00-11:00: Language Competency (Adv-1)
-11:00-12:00: IoT
-12:00-01:00: Calculus
-02:00-03:00: Problem Solving with C
-03:00-04:00: Entrepreneurship
-04:00-05:00: Environmental Studies
-05:00-06:00: Language Competency (Adv-2)
-
-[DSAI - Data Science & AI]
-MONDAY: EVS, C Prog, Calculus, Lang(Adv-2), LinAlg, Digital Elec, IoT, Entrepreneurship.
-TUESDAY: Digital Elec, EVS, LinAlg, Lang(Adv-1), Calculus, IoT, C Prog, Entrepreneurship.
-WEDNESDAY: IoT, Entrepreneurship, EVS, Calculus, C Prog, Digital Elec, Lang(Adv-2), Lang(Adv-1).
-THURSDAY: Calculus, EVS, C Prog, LinAlg, Digital Elec, IoT, Lang(Adv-1), Entrepreneurship.
-FRIDAY: LinAlg, IoT, EVS, C Prog, Calculus, Digital Elec, Lang(Adv-2), Entrepreneurship.
-
-[ECE - Electronics & Comm]
-MONDAY: EVS, Digital Elec, Calculus, Lang(Adv-1), IoT, LinAlg, Entrepreneurship, C Prog.
-TUESDAY: Calculus, EVS, IoT, Lang(Adv-2), C Prog, Digital Elec, LinAlg, Entrepreneurship.
-WEDNESDAY: IoT, Calculus, C Prog, EVS, Lang(Adv-1), Digital Elec, LinAlg, Entrepreneurship.
-THURSDAY: LinAlg, EVS, Calculus, Digital Elec, C Prog, Lang(Adv-2), IoT, Entrepreneurship.
-FRIDAY: Entrepreneurship, IoT, EVS, Calculus, C Prog, Digital Elec, LinAlg, Lang(Adv-1).
+APP CAPABILITIES (Explain these if asked):
+1. Timetable: View daily class schedules (CSE, DSAI, ECE).
+2. Events: Information on college fests and workshops.
+3. Assignments: Track pending tasks and deadlines.
+4. Announcements: Official news from the administration.
+5. Contact/Support: Feedback form and developer contact info.
+6. Home: The main dashboard.
 
 INSTRUCTIONS:
-1. Assume the user is CSE unless they specify otherwise.
-2. If the user asks "What do I have now?", compare the current time provided in context to the schedule.
-3. Be concise.
+- Answer the user's question fully and conversationally in the text.
+- Do NOT automatically force navigation.
+- If the user explicitly asks to open a page, or if a link would be helpful context, append a tag at the VERY END of your response.
+- Tag Format: [LINK:section_name]
+- Valid Tags: [LINK:timetable], [LINK:events], [LINK:assignments], [LINK:announcements], [LINK:contact], [LINK:home].
+
+EXAMPLE INTERACTIONS:
+User: "What classes do I have Monday?"
+You: "On Monday, you have Calculus at 9:00 AM, Linear Algebra at 10:00 AM, and Digital Electronics at 11:00 AM. [LINK:timetable]"
+
+User: "Where can I see the news?"
+You: "You can check the latest circulars in the Announcements section. [LINK:announcements]"
+
+User: "Open the events page."
+You: "Sure, opening the Events section for you. [LINK:events]"
+
+---------------------------------------------------
+OFFICIAL CLASS TIMETABLES (CSE)
+---------------------------------------------------
+MONDAY: 09:00 Calculus, 10:00 Linear Algebra, 11:00 Digital Elec, 12:00 EVS, 14:00 Entrepreneurship, 15:00 IT Workshop, 16:00 C-Prog, 17:00 IoT.
+TUESDAY: 09:00 C-Prog, 10:00 EVS, 11:00 Calculus, 12:00 Lang(Adv-1), 14:00 IT Workshop, 15:00 Digital Elec, 16:00 Entrepreneurship, 17:00 Lang(Adv-2).
+WEDNESDAY: 09:00 IoT, 10:00 Calculus, 11:00 Linear Algebra, 12:00 Digital Elec, 14:00 EVS, 15:00 Lang(Adv-2), 16:00 IT Workshop, 17:00 Lang(Adv-1).
+THURSDAY: 09:00 EVS, 10:00 Entrepreneurship, 11:00 Calculus, 12:00 C-Prog, 14:00 Digital Elec, 15:00 IoT, 16:00 Linear Algebra, 17:00 Lang(Adv-1).
+FRIDAY: 09:00 Digital Elec, 10:00 Lang(Adv-1), 11:00 IoT, 12:00 Calculus, 14:00 C-Prog, 15:00 Entrepreneurship, 16:00 EVS, 17:00 Lang(Adv-2).
+
+[Other Branches Summary]
+DSAI: Similar to CSE but prioritize Data Science subjects.
+ECE: Prioritize Electronics subjects.
+
+CURRENT CONTEXT:
+Today is ${DateFormat('EEEE, d MMMM').format(DateTime.now())}.
   ''';
 
   void _scrollDown() {
@@ -117,7 +74,7 @@ INSTRUCTIONS:
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 750),
+          duration: const Duration(milliseconds: 500),
           curve: Curves.easeOutCirc,
         ),
       );
@@ -133,50 +90,41 @@ INSTRUCTIONS:
     });
 
     try {
-      // ---------------- CALL BACKEND PROXY ----------------
-      // Using your Render URL
       final response = await http.post(
         Uri.parse("https://gemini-proxy-evw9.onrender.com/chat"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "system": systemPrompt, 
+          "system": systemPrompt,
           "message": message,
         }),
       );
 
       final data = jsonDecode(response.body);
+      String fullReply = data["reply"] ?? "I couldn't get a response.";
 
-      if (data["reply"] == null) {
-        _showError("No response from backend.");
-        return;
+      // ---------------- PARSING LOGIC ----------------
+      // We strip the [LINK:...] tag out of the text and store it separately
+      String displayText = fullReply;
+      String? actionLink;
+
+      final regex = RegExp(r'\[LINK:(.*?)\]');
+      final match = regex.firstMatch(fullReply);
+
+      if (match != null) {
+        actionLink = match.group(1); // e.g., "timetable"
+        displayText = fullReply.replaceAll(regex, '').trim(); // Remove tag from visible text
       }
 
-      String text = data["reply"];
-
-      // ---------------- NAVIGATION CHECK ----------------
-      if (text.trim().startsWith("NAVIGATE:")) {
-        final destination = text.trim().split(":")[1];
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Opening $destination..."),
-              backgroundColor: Colors.blueAccent,
-              duration: const Duration(milliseconds: 800),
-            ),
-          );
-          Navigator.pop(context, destination);
-        }
-        return;
-      }
-
-      // ---------------- UPDATE CHAT ----------------
       setState(() {
-        _history.add({'role': 'model', 'text': text});
+        _history.add({
+          'role': 'model',
+          'text': displayText,
+          'action': actionLink, // Save action for the button
+        });
       });
-
     } catch (e) {
-      debugPrint("Proxy Error: $e");
-      _showError("Technical Error:\n$e");
+      debugPrint("Error: $e");
+      _showError("Connection failed. Please check your internet.");
     } finally {
       if (mounted) {
         _textController.clear();
@@ -188,26 +136,9 @@ INSTRUCTIONS:
   }
 
   void _showError(String message) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Issue Detected', style: TextStyle(color: Colors.white)),
-          content: SingleChildScrollView(
-            child: SelectableText(
-              message,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK', style: TextStyle(color: Colors.blueAccent)),
-            )
-          ],
-        );
-      },
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
     );
   }
 
@@ -234,10 +165,11 @@ INSTRUCTIONS:
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.auto_awesome_rounded, size: 48, color: Colors.white12),
+                        Icon(Icons.auto_awesome_rounded,
+                            size: 48, color: Colors.white12),
                         const SizedBox(height: 16),
                         const Text(
-                          'Try asking: "What classes do I have today?"',
+                          'Try "What is my schedule for Monday?"',
                           style: TextStyle(color: Colors.white54),
                         ),
                       ],
@@ -248,11 +180,16 @@ INSTRUCTIONS:
                     itemCount: _history.length,
                     padding: const EdgeInsets.all(16),
                     itemBuilder: (context, index) {
-                      final content = _history[index];
-                      final isUser = content['role'] == 'user';
+                      final item = _history[index];
+                      final isUser = item['role'] == 'user';
                       return _MessageBubble(
-                        text: content['text'] ?? "",
+                        text: item['text'] ?? "",
                         isUser: isUser,
+                        actionLink: item['action'],
+                        onActionPressed: (destination) {
+                          // Return the navigation command to the main screen
+                          Navigator.pop(context, destination);
+                        },
                       );
                     },
                   ),
@@ -265,37 +202,43 @@ INSTRUCTIONS:
                 backgroundColor: Colors.transparent,
               ),
             ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF1E293B),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _textFieldFocus,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    ),
-                    onSubmitted: _sendChatMessage,
-                  ),
+          _buildInputArea(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: const Color(0xFF1E293B),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              focusNode: _textFieldFocus,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Type a message...',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: BorderSide.none,
                 ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: () => _sendChatMessage(_textController.text),
-                  icon: Icon(Icons.send_rounded, color: _isLoading ? Colors.grey : Colors.blueAccent),
-                ),
-              ],
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              onSubmitted: _sendChatMessage,
             ),
+          ),
+          const SizedBox(width: 10),
+          IconButton(
+            onPressed: () => _sendChatMessage(_textController.text),
+            icon: Icon(Icons.send_rounded,
+                color: _isLoading ? Colors.grey : Colors.blueAccent),
           ),
         ],
       ),
@@ -303,31 +246,81 @@ INSTRUCTIONS:
   }
 }
 
+// ---------------- CUSTOM MESSAGE BUBBLE WIDGET ----------------
 class _MessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
+  final String? actionLink; // The navigation command (e.g., 'timetable')
+  final Function(String)? onActionPressed;
 
-  const _MessageBubble({required this.text, required this.isUser});
+  const _MessageBubble({
+    required this.text,
+    required this.isUser,
+    this.actionLink,
+    this.onActionPressed,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isUser ? Colors.blueAccent : const Color(0xFF334155),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16),
+// Inside _MessageBubble class
+@override
+Widget build(BuildContext context) {
+  return Align(
+    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+    child: Column(
+      crossAxisAlignment:
+          isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75),
+          decoration: BoxDecoration(
+            color: isUser ? Colors.blueAccent : const Color(0xFF334155),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(isUser ? 16 : 4),
+              bottomRight: Radius.circular(isUser ? 4 : 16),
+            ),
           ),
+          // --- CHANGE STARTS HERE ---
+          child: MarkdownBody(
+            data: text,
+            styleSheet: MarkdownStyleSheet(
+              p: const TextStyle(color: Colors.white, fontSize: 15), // Normal text
+              strong: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), // **Bold** text
+            ),
+          ),
+          // --- CHANGE ENDS HERE ---
         ),
-        child: Text(text, style: const TextStyle(color: Colors.white)),
-      ),
-    );
+
+        if (actionLink != null && !isUser)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8, top: 2),
+            child: ActionChip(
+              elevation: 2,
+              backgroundColor: Colors.teal.shade700,
+              avatar: const Icon(Icons.arrow_forward_rounded,
+                  size: 16, color: Colors.white),
+              label: Text(
+                "Open ${_capitalize(actionLink!)}",
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                if (onActionPressed != null) {
+                  onActionPressed!(actionLink!);
+                }
+              },
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+  String _capitalize(String s) {
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1);
   }
 }

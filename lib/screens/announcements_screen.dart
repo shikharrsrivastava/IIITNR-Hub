@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// Removed 'package:intl/intl.dart' to fix dependency error
 
 class AnnouncementsScreen extends StatelessWidget {
   const AnnouncementsScreen({super.key});
@@ -119,8 +118,9 @@ class _AnnouncementCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Fetch the TITLE here
+    final title = data['title'] ?? 'Notice'; 
     final message = data['message'] ?? '';
-    final sender = data['sender'] ?? 'Faculty';
     final Timestamp? ts = data['timestamp'];
     
     // Use custom formatter instead of DateFormat
@@ -159,47 +159,53 @@ class _AnnouncementCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isImportant 
-                                ? Colors.redAccent.withOpacity(0.2) 
-                                : Colors.blueAccent.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isImportant ? Icons.priority_high_rounded : Icons.person_rounded,
-                            size: 16,
-                            color: isImportant ? Colors.redAccent : Colors.blueAccent,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              sender,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isImportant 
+                                  ? Colors.redAccent.withOpacity(0.2) 
+                                  : Colors.blueAccent.withOpacity(0.2),
+                              shape: BoxShape.circle,
                             ),
-                            Text(
-                              timeStr,
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 11,
-                              ),
+                            child: Icon(
+                              isImportant ? Icons.priority_high_rounded : Icons.notifications_active_rounded,
+                              size: 18,
+                              color: isImportant ? Colors.redAccent : Colors.blueAccent,
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          const SizedBox(width: 12),
+                          // 2. Display Title and Time in a column
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title, // Displaying Title from DB
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16, // Increased size slightly for emphasis
+                                  ),
+                                ),
+                                Text(
+                                  timeStr,
+                                  style: const TextStyle(
+                                    color: Colors.white38,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     if (isImportant)
                       Container(
+                        margin: const EdgeInsets.only(left: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withOpacity(0.2),
@@ -217,7 +223,7 @@ class _AnnouncementCard extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text(
                   message,
                   style: const TextStyle(
